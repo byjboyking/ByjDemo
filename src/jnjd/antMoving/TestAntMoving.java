@@ -7,7 +7,8 @@ public class TestAntMoving extends TestCase {
 	double [] pos = {3,7,11,17,23};
 	double length = 27;
 	double  speed =1;
-	
+
+	//test
 	
 	public void test001() {
 		System.out.println("*********test001-Õı³£ÓÃÀı************");
