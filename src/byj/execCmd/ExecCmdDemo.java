@@ -1,13 +1,14 @@
 package byj.execCmd;
 
+import byj.io.IOUtil;
 import byj.util.U;
 import org.apache.commons.exec.CommandLine;
 import org.apache.commons.exec.DefaultExecutor;
+import org.apache.commons.exec.ExecuteWatchdog;
 import org.apache.commons.exec.PumpStreamHandler;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStreamReader;
+import java.awt.*;
+import java.io.*;
 
 //功能1. 执行 cmd start 打开一个文本文件
 //功能2. Java调用命令行并获取执行结果 （执行一个ping 命令 并获取返回的信息） 
@@ -21,9 +22,56 @@ public class ExecCmdDemo {
 		//a.bat   里面， 就是一行 ping www.taobao.com
 		//execCmdAndGetResponse( "D:\\a.bat");
 
-		String response = execCmdAndGetResponseEx("cmd /c d: && cd D:\\jnjdtest && dir");
-		U.info("response:"+response);
+//		String response = execCmdAndGetResponseEx("cmd /c d: && cd D:\\jnjdtest && dir");
+//		U.info("response:"+response);
+
+//		String path="C:\\Program Files (x86)\\Youdao\\YoudaoNote\\YoudaoNote.exe";
+//		startExe(path);
+
+		//String response = execCmdAndGetResponseEx_watchdog("cmd /c d: && ping www.taobao.com");
+
+
+
+		StringBuilder sb =new StringBuilder();
+		sb.append("cmd /c d: ");
+		for(int i=0;i<2;i++){
+			sb.append(" && ");
+			sb.append("ping www.taobao.com");
+		}
+		long start =  System.currentTimeMillis();
+		String response = execCmdAndGetResponseWithWatchdog(sb.toString(),3000);
+		long consuming = System.currentTimeMillis()-start;
+		U.info("consuming:"+consuming+" ;response:"+response);
 	}
+
+	public static String execCmdAndGetResponseWithWatchdog(String command,long timeout) {
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+		ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
+
+		try {
+			ExecuteWatchdog watchdog = new ExecuteWatchdog(timeout);
+			CommandLine commandline = CommandLine.parse(command);
+			DefaultExecutor exec = new DefaultExecutor();
+			exec.setExitValues(null);
+			exec.setWatchdog(watchdog);
+			PumpStreamHandler streamHandler = new PumpStreamHandler(outputStream,errorStream);
+			exec.setStreamHandler(streamHandler);
+			int execStatus = exec.execute(commandline);
+			U.info("execStatus:"+execStatus);
+			//正常场景，返回值为0；
+			//timeout, 返回值为1；
+			String out = outputStream.toString("gbk");
+			String error = errorStream.toString("gbk");
+			return out+error;
+		} catch (Exception e) {
+			U.err("ping task failed."+e);
+			return e.toString();
+		}finally {
+			IOUtil.closeQuietly(outputStream,errorStream);
+		}
+
+	}
+
 
 	private static void execCmd() {
 		Runtime runtime = Runtime.getRuntime();
@@ -60,14 +108,7 @@ public class ExecCmdDemo {
 	        }
 	        finally
 	        {
-	            if (br != null)
-	            {
-	                try {
-	                    br.close();
-	                } catch (Exception e) {
-	                    e.printStackTrace();
-	                }
-	            }
+				IOUtil.closeQuietly(br);
 	        }
 	    }
 
@@ -118,4 +159,21 @@ public class ExecCmdDemo {
 
 	}
 
+
+
+	/**
+	 * 打开exe， 会新开一个窗口。
+	 * 注意：如果是通过 Runtime.getRuntime().exec("cmd /k "+path);  打开，只能在任务管理器看到exe， 没有看到exe的界面。
+	 * @param path
+	 */
+	public static void startExe(String path){
+
+		try {
+			Desktop.getDesktop().open(new File(path));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
 }
+
