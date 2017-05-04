@@ -1,22 +1,5 @@
 package byj.io;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedWriter;
-import java.io.Closeable;
-import java.io.File;
-import java.io.FileFilter;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
-
 import byj.util.U;
 
 public class IOOperDemo {
@@ -54,11 +37,14 @@ public class IOOperDemo {
 		
 		
 		//7. 压缩和解压缩
-		boolean zipRtn = IOUtil.zip("D:\\testCopy\\新建文件夹\\src-副本","D:\\testCopy\\新建文件夹\\src-副本-target1.rar") ;
-		U.info("压缩操作状态，zipRtn:"+zipRtn);
-	    //注意，文件名不能有空格，否则解压缩会有问题！！待解决。
-		boolean unzipRtn = IOUtil.unzip("D:\\testCopy\\新建文件夹\\src-副本-target1.rar","D:\\testCopy\\新建文件夹 (6)");
+//		boolean zipRtn = IOUtil.zip("D:\\testCopy\\新建文件夹\\src-副本","D:\\testCopy\\新建文件夹\\src-副本-target1.rar") ;
+//		U.info("压缩操作状态，zipRtn:"+zipRtn);
+//	    //注意，文件名不能有空格，否则解压缩会有问题！！待解决。
+		boolean unzipRtn = IOUtil.unZip("C:\\Users\\byj\\Desktop\\ddd\\test01.rar","C:\\Users\\byj\\Desktop\\ddd\\test02");
 		U.info("解压缩操作状态，unzipRtn:"+unzipRtn);
+
+
+
 	}
 
 

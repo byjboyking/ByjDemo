@@ -1,23 +1,15 @@
 package byj.io;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedWriter;
-import java.io.Closeable;
-import java.io.File;
-import java.io.FileFilter;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
-
 import byj.util.U;
+import com.github.junrar.Archive;
+import com.github.junrar.rarfile.FileHeader;
+import org.apache.tools.zip.ZipEntry;
+import org.apache.tools.zip.ZipFile;
+
+import java.io.*;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
 
 public class IOUtil {
 
@@ -275,159 +267,162 @@ public class IOUtil {
 			}
 		}
 	}
-	
-	
-	
-	
-	
-	
-	//第二版
-	
+
 	/**
-	 * 压缩文件
-	 * 已经验证。 压缩支持 txt， python，java，xlsx
-	 * @param filePath 待压缩的文件夹路径
-	 * @param targetPath 压缩后的目标文件（需要以rar和 zip 结尾， 如果存在会先删除）
+	 * 关闭一个或多个流对象
+	 * @param closeables 可关闭的流对象列表
+	 * @throws IOException
+	 */
+	public static void close(Closeable... closeables) throws IOException {
+		if (closeables != null) {
+			for (Closeable closeable : closeables) {
+				if (closeable != null) {
+					closeable.close();
+				}
+			}
+		}
+	}
+
+	/**
+	 * 关闭一个或多个流对象
+	 */
+	public static void closeQuietly(Closeable... closeables) {
+		try {
+			close(closeables);
+		} catch (IOException e) {
+			// do nothing
+		}
+	}
+
+	/**
+	 * 同时支持zip和rar
+	 * @param zipFileName 需要解压缩的zip和rar文件
+	 * @param targetFolder 解压缩的目标文件夹
 	 * @return
 	 */
-    public static boolean zip(String filePath,String targetPath) {
-        File target = null;
-        File source = new File(filePath);
-        if (!source.exists()) {
-        	U.err("zip->filePath not exist, filePath:"+filePath);
-        	return false;
-        }
-        
-        target = new File(targetPath);
-        if( !(target.getName().toLowerCase().endsWith("rar") || target.getName().toLowerCase().endsWith("zip")) ){
-        	//不是 rar或 zip
-        	U.err("zip->目标文件后缀名异常，无法压缩,targetPath:"+targetPath);
-        	return false;
-        }
-        
-        createParentFolderIfNeeded(targetPath);
-        if (target.exists()) {
-            boolean delete = target.delete();//删除旧的压缩包
-            U.info("zip->targetPath exist,  delete it,  deleteFlag :"+delete);
-        }
-        
-        FileOutputStream fos = null;
-        ZipOutputStream zos = null;
-        try {
-            fos = new FileOutputStream(target);
-            zos = new ZipOutputStream(new BufferedOutputStream(fos));
+	public static boolean unZip(String zipFileName, String targetFolder) {
+		if (zipFileName.toLowerCase().endsWith(".zip")) {
+			return unZipFiles(zipFileName, targetFolder);
+		} else if (zipFileName.toLowerCase().endsWith(".rar")) {
+			unRarFile(zipFileName, targetFolder);
+			return true;
+		}else{
+			U.err("unZip->不是zip或rar，无法解压缩！");
+			return false;
+		}
+	}
 
-            addEntry(null, source, zos);  //添加对应的文件Entry
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } finally {
-            closeQuietly(zos, fos);
-        }
-        
-        return true;
-    }
+	/**
+	 * 解压zip格式的压缩文件到指定位置
+	 * @param zipFileName 压缩文件
+	 * @param extPlace 解压目录
+	 */
+	@SuppressWarnings("unchecked")
+	private static boolean unZipFiles(String zipFileName, String extPlace) {
+		System.setProperty("sun.zip.encoding", System.getProperty("sun.jnu.encoding"));
+		try {
+			(new File(extPlace)).mkdirs();
+			File f = new File(zipFileName);
+			ZipFile zipFile = new ZipFile(zipFileName,"GBK");  //处理中文文件名乱码的问题
+			if((!f.exists()) && (f.length() <= 0)) {
+				throw new Exception("要解压的文件不存在!");
+			}
+			String strPath, gbkPath, strtemp;
+			File tempFile = new File(extPlace);
+			strPath = tempFile.getAbsolutePath();
+			Enumeration<?> e = zipFile.getEntries();
+			while(e.hasMoreElements()){
+				ZipEntry zipEnt = (ZipEntry) e.nextElement();
+				gbkPath=zipEnt.getName();
+				if(zipEnt.isDirectory()){
+					strtemp = strPath + File.separator + gbkPath;
+					File dir = new File(strtemp);
+					dir.mkdirs();
+					continue;
+				} else {
+					//读写文件
+					InputStream is = zipFile.getInputStream(zipEnt);
+					BufferedInputStream bis = new BufferedInputStream(is);
+					gbkPath=zipEnt.getName();
+					strtemp = strPath + File.separator + gbkPath;
 
-    /**
-     * 扫描添加文件Entry
-     *
-     * @param base   基路径
-     * @param source 源文件
-     * @param zos    Zip文件输出流
-     * @throws IOException
-     */
-    private static void addEntry(String base, File source, ZipOutputStream zos) throws IOException {
-        String entry = (base != null) ? base + source.getName() : source.getName(); //按目录分级，形如：aaa/bbb.txt
-        if (source.isDirectory()) {
-            File[] files = source.listFiles();
-            if (files != null && files.length > 0) {
-                for (File file : files) {
-                    addEntry(entry + "/", file, zos);// 递归列出目录下的所有文件，添加文件 Entry
-                }
-            }
-        } else {
-            FileInputStream fis = null;
-            BufferedInputStream bis = null;
-            try {
-                byte[] buffer = new byte[1024 * 10];
-                fis = new FileInputStream(source);
-                bis = new BufferedInputStream(fis, buffer.length);
-                int read;
-                zos.putNextEntry(new ZipEntry(entry)); //如果只是想将文件夹下的所有文件压缩，不需名要压缩父目录,约定文件名长度 entry.substring(length)
-                while ((read = bis.read(buffer, 0, buffer.length)) != -1) {
-                    zos.write(buffer, 0, read);
-                }
-                zos.closeEntry();
-            } finally {
-                closeQuietly(bis, fis);
-            }
-        }
-    }
+					//建目录
+					String strsubdir = gbkPath;
+					for(int i = 0; i < strsubdir.length(); i++) {
+						if(strsubdir.substring(i, i + 1).equalsIgnoreCase("/")) {
+							String temp = strPath + File.separator + strsubdir.substring(0, i);
+							File subdir = new File(temp);
+							if(!subdir.exists())
+								subdir.mkdir();
+						}
+					}
+					FileOutputStream fos = new FileOutputStream(strtemp);
+					BufferedOutputStream bos = new BufferedOutputStream(fos);
+					int c;
+					while((c = bis.read()) != -1) {
+						bos.write((byte) c);
+					}
+					bos.close();
+					fos.close();
+				}
+			}
+			return true;
+		} catch(Exception e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+	/**
+	 * 根据原始rar路径，解压到指定文件夹下.
+	 * @param srcRarPath 原始rar路径
+	 * @param dstDirectoryPath 解压到的文件夹
+	 */
+	public static void unRarFile(String srcRarPath, String dstDirectoryPath) {
+		if (!srcRarPath.toLowerCase().endsWith(".rar")) {
+			System.out.println("非rar文件！");
+			return;
+		}
+		File dstDiretory = new File(dstDirectoryPath);
+		if (!dstDiretory.exists()) {// 目标目录不存在时，创建该文件夹
+			dstDiretory.mkdirs();
+		}
+		Archive a = null;
+		try {
+			a = new Archive(new File(srcRarPath));
+			if (a != null) {
+				//a.getMainHeader().print(); // 打印文件信息.
+				FileHeader fh = a.nextFileHeader();
+				while (fh != null) {
+					//防止文件名中文乱码问题的处理
 
-    /**
-     * 解压文件
-     *
-     * @param filePath 压缩文件路径
-     */
-    public static boolean unzip(String filePath, String targetFolder) {
-        File source = new File(filePath);
-        if (!source.exists()) {
-        	U.err("unzip->filePath not exist: filePath:"+filePath);
-        	return false;
-        }
-        
-        createFolderIfNeeded(targetFolder);
+					String fileName = fh.getFileNameW().isEmpty()?fh.getFileNameString():fh.getFileNameW();
+					if (fh.isDirectory()) { // 文件夹
+						File fol = new File(dstDirectoryPath + File.separator + fileName);
+						fol.mkdirs();
+					} else { // 文件
+						File out = new File(dstDirectoryPath + File.separator + fileName.trim());
+						try {
+							if (!out.exists()) {
+								if (!out.getParentFile().exists()) {// 相对路径可能多级，可能需要创建父目录.
+									out.getParentFile().mkdirs();
+								}
+								out.createNewFile();
+							}
+							FileOutputStream os = new FileOutputStream(out);
+							a.extractFile(fh, os);
+							os.close();
+						} catch (Exception ex) {
+							ex.printStackTrace();
+						}
+					}
+					fh = a.nextFileHeader();
+				}
+				a.close();
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
 
-        ZipInputStream zis = null;
-        BufferedOutputStream bos = null;
-        try {
-            zis = new ZipInputStream(new FileInputStream(source));
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null && !entry.isDirectory()) {
-                File target = new File(targetFolder, entry.getName());
-                if (!target.getParentFile().exists()) {  
-                    target.getParentFile().mkdirs();
-                }
-                bos = new BufferedOutputStream(new FileOutputStream(target));
-                int read;
-                byte[] buffer = new byte[1024 * 10];
-                while ((read = zis.read(buffer, 0, buffer.length)) != -1) {
-                    bos.write(buffer, 0, read);
-                }
-                bos.flush();
-            }
-            zis.closeEntry();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } finally {
-            closeQuietly(zis, bos);
-        }
-        
-        return true;
-    }
-	
-    /**
-     * 关闭一个或多个流对象
-     * @param closeables 可关闭的流对象列表
-     * @throws IOException
-     */
-    public static void close(Closeable... closeables) throws IOException {
-        if (closeables != null) {
-            for (Closeable closeable : closeables) {
-                if (closeable != null) {
-                    closeable.close();
-                }
-            }
-        }
-    }
 
-    /**
-     * 关闭一个或多个流对象
-     */
-    public static void closeQuietly(Closeable... closeables) {
-        try {
-            close(closeables);
-        } catch (IOException e) {
-            // do nothing
-        }
-    }
 }
